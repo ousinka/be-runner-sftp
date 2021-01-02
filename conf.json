@@ -1,0 +1,15 @@
+{
+  "skipExist": false,
+  "localPath": "/home/ousinka/Downloads/",
+  "remote": [
+    {
+      "host": "127.0.0.1",
+      "port": 22,
+      "isPrivateKey": false,
+      "username": "ousinka",
+      "passwd": "1234",
+      "privateKeyFile": "",
+      "path": "/home/ousinka/temp"
+    }
+  ]
+}
