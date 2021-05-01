@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/pkg/sftp"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"path"
-	"be-runner-sftp/conf"
+	"smart-sftp/conf"
+	"strings"
 	"time"
+
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -67,19 +69,27 @@ func connect(server conf.RemoteServer) (*sftp.Client, error) {
 	return sftpClient, nil
 }
 
-func uploadDirectory(sftpClient *sftp.Client, localPath string, remotePath string) {
+func uploadDirectory(sftpClient *sftp.Client, localPath string, remotePath string, exclude []string) {
 	start := time.Now()
 	localFiles, err := ioutil.ReadDir(localPath)
 	if err != nil {
-		log.Fatal("read dir list fail ", err)
+		log.Println("read dir list fail ", err)
+		return
 	}
 
 	for _, backupDir := range localFiles {
 		localFilePath := path.Join(localPath, backupDir.Name())
 		remoteFilePath := path.Join(remotePath, backupDir.Name())
+		for _, e := range exclude {
+			if strings.HasPrefix(localFilePath, e) {
+				log.Println("dir exclude ", e)
+				return
+			}
+		}
+
 		if backupDir.IsDir() {
 			sftpClient.Mkdir(remoteFilePath)
-			uploadDirectory(sftpClient, localFilePath, remoteFilePath)
+			uploadDirectory(sftpClient, localFilePath, remoteFilePath, exclude)
 		} else {
 			uploadFile(sftpClient, path.Join(localPath, backupDir.Name()), remotePath)
 		}
@@ -92,7 +102,8 @@ func uploadFile(sftpClient *sftp.Client, localFilePath string, remotePath string
 	start := time.Now()
 	srcFile, err := os.Open(localFilePath)
 	if err != nil {
-		log.Fatal("os.Open error : ", localFilePath, err)
+		log.Println("os.Open error : ", localFilePath, err)
+		return
 	}
 	defer srcFile.Close()
 
@@ -111,19 +122,21 @@ func uploadFile(sftpClient *sftp.Client, localFilePath string, remotePath string
 
 	dstFile, err := sftpClient.Create(remoteFileFullPath)
 	if err != nil {
-		log.Fatal("sftpClient.Create error : ", path.Join(remotePath, remoteFileName), err)
+		log.Println("sftpClient.Create error : ", path.Join(remotePath, remoteFileName), err)
+		return
 	}
 	defer dstFile.Close()
 
 	ff, err := ioutil.ReadAll(srcFile)
 	if err != nil {
-		log.Fatal("ReadAll error : ", localFilePath, err)
+		log.Println("ReadAll error : ", localFilePath, err)
+		return
 	}
 	dstFile.Write(ff)
 	log.Println(localFilePath+" copy file to remote server ", remotePath, " succ. cost:", time.Since(start))
 }
 
-func doUpload(localPath string, argsPath string, server conf.RemoteServer) {
+func doUpload(localPath string, argsPath string, server conf.RemoteServer, exclude []string) {
 	var (
 		err        error
 		sftpClient *sftp.Client
@@ -132,6 +145,7 @@ func doUpload(localPath string, argsPath string, server conf.RemoteServer) {
 	sftpClient, err = connect(server)
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 	defer sftpClient.Close()
 
@@ -143,9 +157,9 @@ func doUpload(localPath string, argsPath string, server conf.RemoteServer) {
 
 	log.Print("start upload dir:", localPath, " to server:", server.Host, " dir:", server.Path)
 	if argsPath == "" {
-		uploadDirectory(sftpClient, localPath, server.Path)
+		uploadDirectory(sftpClient, localPath, server.Path, exclude)
 	} else {
-		uploadDirectory(sftpClient, localPath+argsPath, server.Path+argsPath)
+		uploadDirectory(sftpClient, localPath+argsPath, server.Path+argsPath, exclude)
 	}
 
 	elapsed := time.Since(start)
@@ -166,7 +180,7 @@ func main() {
 
 	log.Println("path:", argsPath)
 	for _, server := range config.Remote {
-		doUpload(config.LocalPath, argsPath, server)
+		doUpload(config.LocalPath, argsPath, server, config.Exclude)
 	}
 
 	log.Println("sync end. cost:", time.Since(start))

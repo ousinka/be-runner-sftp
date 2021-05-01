@@ -17,14 +17,13 @@ func init() {
 	}
 	log.SetOutput(logFile) // 将文件设置为log输出的文件
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	return
 }
 
 //加载配置文件
 func LoadConf(fileName string) *Conf {
 	cfg := &Conf{}
 	data, err := ioutil.ReadFile(fileName)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 
